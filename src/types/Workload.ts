@@ -8,6 +8,9 @@ export type Workload = {
   services: number[];
   storageCapacityRequired?: number;
   duplicateOf?: number;
+  // Control plane scheduling configuration
+  allowControlPlane?: boolean; // Can run on control plane nodes
+  requireControlPlane?: boolean; // Must run on control plane nodes
 };
 
 export type WorkloadDescriptor = {
@@ -17,4 +20,7 @@ export type WorkloadDescriptor = {
   usesMachines: string[];
   services: ServiceDescriptor[];
   storageCapacityRequired?: number;
+  // Control plane scheduling configuration
+  allowControlPlane?: boolean; // Can run on control plane nodes
+  requireControlPlane?: boolean; // Must run on control plane nodes
 };

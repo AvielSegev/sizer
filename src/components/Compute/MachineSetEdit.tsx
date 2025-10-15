@@ -16,6 +16,8 @@ import {
   SelectVariant,
   Button,
   SelectOptionObject,
+  Checkbox,
+  TextInput,
 } from "@patternfly/react-core";
 import { platformInstanceMap } from "../../cloudInstance";
 import * as _ from "lodash";
@@ -48,6 +50,17 @@ const MachineSetEditModal: React.FC<WorkloadEditModalProps> = ({
   const [memory, setMem] = React.useState(machineSet.memory);
   const isCloudPlatform = affirmCloudPlatform(platform);
 
+  // Control plane scheduling state
+  const [allowWorkloadScheduling, setAllowWorkloadScheduling] = React.useState(
+    machineSet.allowWorkloadScheduling ?? false
+  );
+  const [reservedCPU, setReservedCPU] = React.useState(
+    machineSet.controlPlaneReserved?.cpu ?? 2
+  );
+  const [reservedMemory, setReservedMemory] = React.useState(
+    machineSet.controlPlaneReserved?.memory ?? 4
+  );
+
   const workloadOptions = React.useMemo(
     () =>
       workloads.map((workload) => {
@@ -71,6 +84,8 @@ const MachineSetEditModal: React.FC<WorkloadEditModalProps> = ({
       platformInstanceMap[platform],
       (item) => item.name === selectedInstance
     );
+    const isControlPlane = machineSet.name === "controlPlane";
+
     const updateMS = Object.assign({}, machineSet, {
       onlyFor: dedicated,
       instanceName: selectedInstance,
@@ -82,6 +97,16 @@ const MachineSetEditModal: React.FC<WorkloadEditModalProps> = ({
       numberOfDisks: isCloudPlatform
         ? instance.maxDisks
         : machineSet.numberOfDisks,
+      // Add control plane scheduling configuration
+      allowWorkloadScheduling: isControlPlane
+        ? allowWorkloadScheduling
+        : undefined,
+      controlPlaneReserved: isControlPlane
+        ? {
+            cpu: reservedCPU,
+            memory: reservedMemory,
+          }
+        : undefined,
     });
     dispatch(updateMachineSet(updateMS));
     dispatch(removeAllNodes());
@@ -132,6 +157,58 @@ const MachineSetEditModal: React.FC<WorkloadEditModalProps> = ({
             {workloadOptions}
           </Select>
         </FormGroup>
+
+        {/* Control Plane Scheduling Options - only show if this is the control plane machine set */}
+        {machineSet.name === "controlPlane" && (
+          <>
+            <FormGroup
+              label="Control Plane Scheduling"
+              fieldId="control-plane-scheduling"
+            >
+              <Checkbox
+                id="allow-workload-scheduling-edit"
+                label="Allow workload scheduling on control plane nodes"
+                description="Enable this to allow user workloads to be scheduled on control plane nodes. Control plane services will be prioritized."
+                isChecked={allowWorkloadScheduling}
+                onChange={(checked) => setAllowWorkloadScheduling(checked)}
+              />
+            </FormGroup>
+
+            {allowWorkloadScheduling && (
+              <>
+                <FormGroup
+                  label="Reserved CPU for Control Plane"
+                  fieldId="reserved-cpu-edit"
+                  helperText="CPU cores reserved for control plane services"
+                >
+                  <TextInput
+                    id="reserved-cpu-edit"
+                    type="number"
+                    value={reservedCPU}
+                    onChange={(val) => setReservedCPU(parseInt(val) || 2)}
+                    min={1}
+                    max={cpu - 1}
+                  />
+                </FormGroup>
+
+                <FormGroup
+                  label="Reserved Memory for Control Plane (GB)"
+                  fieldId="reserved-memory-edit"
+                  helperText="Memory reserved for control plane services"
+                >
+                  <TextInput
+                    id="reserved-memory-edit"
+                    type="number"
+                    value={reservedMemory}
+                    onChange={(val) => setReservedMemory(parseInt(val) || 4)}
+                    min={1}
+                    max={memory - 1}
+                  />
+                </FormGroup>
+              </>
+            )}
+          </>
+        )}
       </Form>
     </Modal>
   );

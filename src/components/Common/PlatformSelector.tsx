@@ -87,6 +87,11 @@ const PlatformSelector: React.FC = () => {
         onlyFor: ["ControlPlane"],
         numberOfDisks: 24,
         label: "Control Plane Node",
+        allowWorkloadScheduling: false, // Default to disabled
+        controlPlaneReserved: {
+          cpu: 2, // Reserve 2 CPU for control plane services
+          memory: 4, // Reserve 4GB for control plane services
+        },
       };
       dispatch(addMachineSet(controlPlaneMachineSet));
       if (clientID) {

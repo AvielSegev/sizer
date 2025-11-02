@@ -11,6 +11,12 @@ export type Service = {
   limitCPU?: number;
   limitMemory?: number;
 
+  // Dynamic over-commit ranges - Optional (for dynamic mode)
+  minLimitCPU?: number;
+  maxLimitCPU?: number;
+  minLimitMemory?: number;
+  maxLimitMemory?: number;
+
   // Over-commit mode - Optional
   overCommitMode?: "static" | "dynamic" | "none";
 

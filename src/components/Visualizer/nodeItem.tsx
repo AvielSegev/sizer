@@ -11,7 +11,7 @@ import {
   Label,
 } from "@patternfly/react-core";
 import { DatabaseIcon, CpuIcon, MemoryIcon } from "@patternfly/react-icons";
-import { Node } from "../../types";
+import { Node, ResourceRange } from "../../types";
 import "./nodeItem.css";
 import { useSelector } from "react-redux";
 import { Store } from "../../redux";
@@ -23,6 +23,27 @@ import {
 type NodeItemProps = {
   node: Node;
   title: string;
+};
+
+// Helper function to format a value that can be either a number or a range
+const formatValue = (value: number | ResourceRange, decimals = 2): string => {
+  if (typeof value === "number") {
+    return value.toFixed(decimals);
+  }
+  // For ranges, check if min and max are very close (< 20% difference)
+  const percentDiff = ((value.max - value.min) / value.min) * 100;
+  if (percentDiff < 20 && value.min > 0) {
+    // Show average for narrow ranges
+    const avg = (value.min + value.max) / 2;
+    return `~${avg.toFixed(decimals)}`;
+  }
+  // Show full range for wide differences
+  return `${value.min.toFixed(decimals)}-${value.max.toFixed(decimals)}`;
+};
+
+// Helper to get the max value from a number or range (for risk calculation)
+const getMaxValue = (value: number | ResourceRange): number => {
+  return typeof value === "number" ? value : value.max;
 };
 
 const NodeItem: React.FC<NodeItemProps> = ({ node, title }) => {
@@ -43,8 +64,8 @@ const NodeItem: React.FC<NodeItemProps> = ({ node, title }) => {
   );
 
   const hasOverCommit =
-    overCommitMetrics.cpuOverCommitRatio > 1 ||
-    overCommitMetrics.memoryOverCommitRatio > 1;
+    getMaxValue(overCommitMetrics.cpuOverCommitRatio) > 1 ||
+    getMaxValue(overCommitMetrics.memoryOverCommitRatio) > 1;
 
   const getRiskColor = (riskLevel: string) => {
     switch (riskLevel) {
@@ -76,10 +97,14 @@ const NodeItem: React.FC<NodeItemProps> = ({ node, title }) => {
           {hasOverCommit && (
             <Label color={getRiskColor(overCommitMetrics.riskLevel)} isCompact>
               Over-Commit:{" "}
-              {Math.max(
-                overCommitMetrics.cpuOverCommitRatio,
-                overCommitMetrics.memoryOverCommitRatio
-              ).toFixed(2)}
+              {formatValue(
+                Math.max(
+                  getMaxValue(overCommitMetrics.cpuOverCommitRatio),
+                  getMaxValue(overCommitMetrics.memoryOverCommitRatio)
+                ) >= getMaxValue(overCommitMetrics.cpuOverCommitRatio)
+                  ? overCommitMetrics.memoryOverCommitRatio
+                  : overCommitMetrics.cpuOverCommitRatio
+              )}
               :1
             </Label>
           )}
@@ -105,7 +130,7 @@ const NodeItem: React.FC<NodeItemProps> = ({ node, title }) => {
           {hasOverCommit && (
             <div style={{ fontSize: "0.85rem", marginTop: "0.25rem" }}>
               Req: {overCommitMetrics.requestedCPU.toFixed(2)} | Lim:{" "}
-              {overCommitMetrics.limitCPU.toFixed(2)}
+              {formatValue(overCommitMetrics.limitCPU)}
             </div>
           )}
         </CardBody>
@@ -119,7 +144,7 @@ const NodeItem: React.FC<NodeItemProps> = ({ node, title }) => {
           {hasOverCommit && (
             <div style={{ fontSize: "0.85rem", marginTop: "0.25rem" }}>
               Req: {overCommitMetrics.requestedMemory.toFixed(2)} GB | Lim:{" "}
-              {overCommitMetrics.limitMemory.toFixed(2)} GB
+              {formatValue(overCommitMetrics.limitMemory)} GB
             </div>
           )}
         </CardBody>

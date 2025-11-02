@@ -356,4 +356,275 @@ describe("Integration: Scheduling with Over-Commitment", () => {
     // even though LIMITS (10 CPU, 40 GB) exceed node capacity
     expect(nodes.length).toBe(1);
   });
+
+  it("should schedule dynamic over-commit with min/max ranges", () => {
+    const machineSet: MachineSet = {
+      id: 1,
+      name: "worker",
+      cpu: 16,
+      memory: 64,
+      instanceName: "m5.4xlarge",
+      numberOfDisks: 24,
+      onlyFor: [],
+      label: "worker",
+    };
+
+    const service: Service = {
+      id: 1,
+      name: "VM-Dynamic-Range",
+      requiredCPU: 2,
+      requiredMemory: 8,
+      minLimitCPU: 4,
+      maxLimitCPU: 12,
+      minLimitMemory: 16,
+      maxLimitMemory: 48,
+      zones: 1,
+      runsWith: [],
+      avoid: [],
+      overCommitMode: "dynamic",
+    };
+
+    const workload: Workload = {
+      id: 1,
+      name: "Dynamic-Range-Workload",
+      count: 1,
+      usesMachines: ["worker"],
+      services: [1],
+    };
+
+    dispatch(addService(service));
+    dispatch(addWorkload(workload));
+
+    const scheduler = workloadScheduler(store, dispatch);
+    const usedZonesId: number[] = [];
+    scheduler(workload, [service], [machineSet], usedZonesId);
+
+    const nodes = store.getState().node.nodes;
+
+    // Should be schedulable based on requests (2 CPU, 8 GB)
+    expect(nodes.length).toBeGreaterThan(0);
+
+    // Verify dynamic range information is preserved
+    const scheduledService = store
+      .getState()
+      .service.services.find((s: Service) => s.id === 1);
+    expect(scheduledService.minLimitCPU).toBe(4);
+    expect(scheduledService.maxLimitCPU).toBe(12);
+    expect(scheduledService.minLimitMemory).toBe(16);
+    expect(scheduledService.maxLimitMemory).toBe(48);
+    expect(scheduledService.overCommitMode).toBe("dynamic");
+  });
+
+  it("should schedule multiple dynamic services correctly", () => {
+    const machineSet: MachineSet = {
+      id: 1,
+      name: "worker",
+      cpu: 16,
+      memory: 64,
+      instanceName: "m5.4xlarge",
+      numberOfDisks: 24,
+      onlyFor: [],
+      label: "worker",
+    };
+
+    const service1: Service = {
+      id: 1,
+      name: "VM-Dynamic-1",
+      requiredCPU: 2,
+      requiredMemory: 8,
+      minLimitCPU: 4,
+      maxLimitCPU: 8,
+      minLimitMemory: 16,
+      maxLimitMemory: 32,
+      zones: 1,
+      runsWith: [],
+      avoid: [],
+      overCommitMode: "dynamic",
+    };
+
+    const service2: Service = {
+      id: 2,
+      name: "VM-Dynamic-2",
+      requiredCPU: 2,
+      requiredMemory: 8,
+      minLimitCPU: 4,
+      maxLimitCPU: 8,
+      minLimitMemory: 16,
+      maxLimitMemory: 32,
+      zones: 1,
+      runsWith: [],
+      avoid: [],
+      overCommitMode: "dynamic",
+    };
+
+    const workload: Workload = {
+      id: 1,
+      name: "Multi-Dynamic-Workload",
+      count: 1,
+      usesMachines: ["worker"],
+      services: [1, 2],
+    };
+
+    dispatch(addService(service1));
+    dispatch(addService(service2));
+    dispatch(addWorkload(workload));
+
+    const scheduler = workloadScheduler(store, dispatch);
+    const usedZonesId: number[] = [];
+    scheduler(workload, [service1, service2], [machineSet], usedZonesId);
+
+    const nodes = store.getState().node.nodes;
+
+    // Should be schedulable based on total requests (4 CPU, 16 GB)
+    // Even though max limits (16 CPU, 64 GB) could fill the node
+    expect(nodes.length).toBeGreaterThan(0);
+
+    // Both services should be scheduled
+    const allServices = nodes.flatMap((node) => node.services);
+    expect(allServices).toContain(1);
+    expect(allServices).toContain(2);
+  });
+
+  it("should handle mixed static and dynamic services in scheduling", () => {
+    const machineSet: MachineSet = {
+      id: 1,
+      name: "worker",
+      cpu: 16,
+      memory: 64,
+      instanceName: "m5.4xlarge",
+      numberOfDisks: 24,
+      onlyFor: [],
+      label: "worker",
+    };
+
+    // Static over-commit
+    const staticService: Service = {
+      id: 1,
+      name: "VM-Static",
+      requiredCPU: 2,
+      requiredMemory: 8,
+      limitCPU: 8,
+      limitMemory: 32,
+      zones: 1,
+      runsWith: [],
+      avoid: [],
+      overCommitMode: "static",
+    };
+
+    // Dynamic over-commit
+    const dynamicService: Service = {
+      id: 2,
+      name: "VM-Dynamic",
+      requiredCPU: 2,
+      requiredMemory: 8,
+      minLimitCPU: 4,
+      maxLimitCPU: 12,
+      minLimitMemory: 16,
+      maxLimitMemory: 48,
+      zones: 1,
+      runsWith: [],
+      avoid: [],
+      overCommitMode: "dynamic",
+    };
+
+    const workload: Workload = {
+      id: 1,
+      name: "Mixed-Mode-Workload",
+      count: 1,
+      usesMachines: ["worker"],
+      services: [1, 2],
+    };
+
+    dispatch(addService(staticService));
+    dispatch(addService(dynamicService));
+    dispatch(addWorkload(workload));
+
+    const scheduler = workloadScheduler(store, dispatch);
+    const usedZonesId: number[] = [];
+    scheduler(
+      workload,
+      [staticService, dynamicService],
+      [machineSet],
+      usedZonesId
+    );
+
+    const nodes = store.getState().node.nodes;
+
+    // Both services should be scheduled
+    const allServices = nodes.flatMap((node) => node.services);
+    expect(allServices).toContain(1);
+    expect(allServices).toContain(2);
+
+    // Verify each service mode is preserved
+    const scheduledStatic = store
+      .getState()
+      .service.services.find((s: Service) => s.id === 1);
+    expect(scheduledStatic.overCommitMode).toBe("static");
+    expect(scheduledStatic.limitCPU).toBe(8);
+    expect(scheduledStatic.minLimitCPU).toBeUndefined();
+
+    const scheduledDynamic = store
+      .getState()
+      .service.services.find((s: Service) => s.id === 2);
+    expect(scheduledDynamic.overCommitMode).toBe("dynamic");
+    expect(scheduledDynamic.minLimitCPU).toBe(4);
+    expect(scheduledDynamic.maxLimitCPU).toBe(12);
+  });
+
+  it("should fallback to static limits when dynamic min/max are missing", () => {
+    const machineSet: MachineSet = {
+      id: 1,
+      name: "worker",
+      cpu: 16,
+      memory: 64,
+      instanceName: "m5.4xlarge",
+      numberOfDisks: 24,
+      onlyFor: [],
+      label: "worker",
+    };
+
+    // Dynamic mode but with only static limits provided (should fallback)
+    const service: Service = {
+      id: 1,
+      name: "VM-Partial-Dynamic",
+      requiredCPU: 2,
+      requiredMemory: 8,
+      limitCPU: 8,
+      limitMemory: 32,
+      // No min/max fields
+      zones: 1,
+      runsWith: [],
+      avoid: [],
+      overCommitMode: "dynamic",
+    };
+
+    const workload: Workload = {
+      id: 1,
+      name: "Fallback-Workload",
+      count: 1,
+      usesMachines: ["worker"],
+      services: [1],
+    };
+
+    dispatch(addService(service));
+    dispatch(addWorkload(workload));
+
+    const scheduler = workloadScheduler(store, dispatch);
+    const usedZonesId: number[] = [];
+    scheduler(workload, [service], [machineSet], usedZonesId);
+
+    const nodes = store.getState().node.nodes;
+    expect(nodes.length).toBeGreaterThan(0);
+
+    // Verify service is scheduled with static limits as fallback
+    const scheduledService = store
+      .getState()
+      .service.services.find((s: Service) => s.id === 1);
+    expect(scheduledService.limitCPU).toBe(8);
+    expect(scheduledService.limitMemory).toBe(32);
+    expect(scheduledService.overCommitMode).toBe("dynamic");
+    // Min/max should remain undefined
+    expect(scheduledService.minLimitCPU).toBeUndefined();
+    expect(scheduledService.maxLimitCPU).toBeUndefined();
+  });
 });

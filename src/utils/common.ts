@@ -102,7 +102,7 @@ export const calculateNodeOverCommit = (
   const availableCPU = node.cpuUnits - kubeletCPU;
   const availableMemory = node.memory - kubeletMemory;
 
-  // Sum up requests and limits from services
+  // Sum up requests from services
   const requestedCPU = services.reduce(
     (sum, service) => sum + service.requiredCPU,
     0
@@ -112,23 +112,69 @@ export const calculateNodeOverCommit = (
     0
   );
 
-  // For limits, use the limit value if present, otherwise fall back to request
-  const limitCPU = services.reduce(
-    (sum, service) => sum + (service.limitCPU ?? service.requiredCPU),
-    0
+  // Check if any service has dynamic limits (min/max ranges)
+  const hasDynamicLimits = services.some(
+    (service) =>
+      service.minLimitCPU ||
+      service.maxLimitCPU ||
+      service.minLimitMemory ||
+      service.maxLimitMemory
   );
-  const limitMemory = services.reduce(
-    (sum, service) => sum + (service.limitMemory ?? service.requiredMemory),
-    0
-  );
+
+  // Calculate min and max limits
+  const minLimitCPU = services.reduce((sum, service) => {
+    return (
+      sum + (service.minLimitCPU ?? service.limitCPU ?? service.requiredCPU)
+    );
+  }, 0);
+
+  const maxLimitCPU = services.reduce((sum, service) => {
+    return (
+      sum + (service.maxLimitCPU ?? service.limitCPU ?? service.requiredCPU)
+    );
+  }, 0);
+
+  const minLimitMemory = services.reduce((sum, service) => {
+    return (
+      sum +
+      (service.minLimitMemory ?? service.limitMemory ?? service.requiredMemory)
+    );
+  }, 0);
+
+  const maxLimitMemory = services.reduce((sum, service) => {
+    return (
+      sum +
+      (service.maxLimitMemory ?? service.limitMemory ?? service.requiredMemory)
+    );
+  }, 0);
+
+  // Determine if we should return ranges or single values
+  const limitCPU = hasDynamicLimits
+    ? { min: minLimitCPU, max: maxLimitCPU }
+    : maxLimitCPU; // For static, use max (which equals min)
+
+  const limitMemory = hasDynamicLimits
+    ? { min: minLimitMemory, max: maxLimitMemory }
+    : maxLimitMemory;
 
   // Calculate over-commit ratios (limits / available capacity after Kubelet)
-  const cpuOverCommitRatio = availableCPU > 0 ? limitCPU / availableCPU : 1;
-  const memoryOverCommitRatio =
-    availableMemory > 0 ? limitMemory / availableMemory : 1;
+  const minCpuRatio = availableCPU > 0 ? minLimitCPU / availableCPU : 1;
+  const maxCpuRatio = availableCPU > 0 ? maxLimitCPU / availableCPU : 1;
+  const minMemoryRatio =
+    availableMemory > 0 ? minLimitMemory / availableMemory : 1;
+  const maxMemoryRatio =
+    availableMemory > 0 ? maxLimitMemory / availableMemory : 1;
 
-  // Determine risk level based on over-commit ratios
-  const maxRatio = Math.max(cpuOverCommitRatio, memoryOverCommitRatio);
+  const cpuOverCommitRatio = hasDynamicLimits
+    ? { min: minCpuRatio, max: maxCpuRatio }
+    : maxCpuRatio;
+
+  const memoryOverCommitRatio = hasDynamicLimits
+    ? { min: minMemoryRatio, max: maxMemoryRatio }
+    : maxMemoryRatio;
+
+  // Determine risk level based on worst-case (max) over-commit ratios
+  const maxRatio = Math.max(maxCpuRatio, maxMemoryRatio);
   let riskLevel: "none" | "low" | "medium" | "high";
   if (maxRatio <= 1) {
     riskLevel = "none";
@@ -183,31 +229,78 @@ export const calculateClusterOverCommit = (
     return acc;
   }, {} as Record<number, number>);
 
+  // Check if any service has dynamic limits
+  const hasDynamicLimits = services.some(
+    (service) =>
+      service.minLimitCPU ||
+      service.maxLimitCPU ||
+      service.minLimitMemory ||
+      service.maxLimitMemory
+  );
+
   // Calculate totals by multiplying each service's resources by its placement count
   const totalRequests = { cpu: 0, memory: 0 };
-  const totalLimits = { cpu: 0, memory: 0 };
+  let minTotalLimitCPU = 0;
+  let maxTotalLimitCPU = 0;
+  let minTotalLimitMemory = 0;
+  let maxTotalLimitMemory = 0;
 
   services.forEach((service) => {
     const placementCount = placementCounts[service.id as number] || 0;
     totalRequests.cpu += service.requiredCPU * placementCount;
     totalRequests.memory += service.requiredMemory * placementCount;
-    totalLimits.cpu +=
-      (service.limitCPU ?? service.requiredCPU) * placementCount;
-    totalLimits.memory +=
-      (service.limitMemory ?? service.requiredMemory) * placementCount;
+
+    // Calculate min and max limits for each service
+    const minCPU =
+      service.minLimitCPU ?? service.limitCPU ?? service.requiredCPU;
+    const maxCPU =
+      service.maxLimitCPU ?? service.limitCPU ?? service.requiredCPU;
+    const minMemory =
+      service.minLimitMemory ?? service.limitMemory ?? service.requiredMemory;
+    const maxMemory =
+      service.maxLimitMemory ?? service.limitMemory ?? service.requiredMemory;
+
+    minTotalLimitCPU += minCPU * placementCount;
+    maxTotalLimitCPU += maxCPU * placementCount;
+    minTotalLimitMemory += minMemory * placementCount;
+    maxTotalLimitMemory += maxMemory * placementCount;
   });
 
-  // Calculate over-commit ratios
-  const overCommitRatio = {
-    cpu: totalAllocatable.cpu > 0 ? totalLimits.cpu / totalAllocatable.cpu : 1,
-    memory:
-      totalAllocatable.memory > 0
-        ? totalLimits.memory / totalAllocatable.memory
-        : 1,
+  // Determine if we should return ranges or single values
+  const totalLimits = {
+    cpu: hasDynamicLimits
+      ? { min: minTotalLimitCPU, max: maxTotalLimitCPU }
+      : maxTotalLimitCPU,
+    memory: hasDynamicLimits
+      ? { min: minTotalLimitMemory, max: maxTotalLimitMemory }
+      : maxTotalLimitMemory,
   };
 
-  // Determine risk level
-  const maxRatio = Math.max(overCommitRatio.cpu, overCommitRatio.memory);
+  // Calculate over-commit ratios
+  const minCpuRatio =
+    totalAllocatable.cpu > 0 ? minTotalLimitCPU / totalAllocatable.cpu : 1;
+  const maxCpuRatio =
+    totalAllocatable.cpu > 0 ? maxTotalLimitCPU / totalAllocatable.cpu : 1;
+  const minMemoryRatio =
+    totalAllocatable.memory > 0
+      ? minTotalLimitMemory / totalAllocatable.memory
+      : 1;
+  const maxMemoryRatio =
+    totalAllocatable.memory > 0
+      ? maxTotalLimitMemory / totalAllocatable.memory
+      : 1;
+
+  const overCommitRatio = {
+    cpu: hasDynamicLimits
+      ? { min: minCpuRatio, max: maxCpuRatio }
+      : maxCpuRatio,
+    memory: hasDynamicLimits
+      ? { min: minMemoryRatio, max: maxMemoryRatio }
+      : maxMemoryRatio,
+  };
+
+  // Determine risk level based on worst-case (max) ratios
+  const maxRatio = Math.max(maxCpuRatio, maxMemoryRatio);
   let riskLevel: "none" | "low" | "medium" | "high";
   if (maxRatio <= 1) {
     riskLevel = "none";

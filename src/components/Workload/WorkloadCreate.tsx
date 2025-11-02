@@ -57,10 +57,18 @@ services:
     requiredMemory: 16
     # (Optional) Resource Limits for over-commitment
     # If not specified, limits = requests (no over-commit)
+    
+    # Static over-commit (fixed ratio):
     # limitCPU: 10
     # limitMemory: 32
-    # (Optional) Over-commit mode: "static", "dynamic", or "none"
     # overCommitMode: "static"
+    
+    # Dynamic over-commit (variable ratio with min/max ranges):
+    # minLimitCPU: 8
+    # maxLimitCPU: 16
+    # minLimitMemory: 24
+    # maxLimitMemory: 48
+    # overCommitMode: "dynamic"
     # The amount of zones this spans (for clustered Pods)
     zones: 3
     # The name of services within this workload

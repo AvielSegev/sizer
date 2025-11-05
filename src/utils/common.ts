@@ -40,13 +40,29 @@ export const canNodeSupportRequirements = (
   const kubeletCPU = getNodeKubeletCPURequirements(node.cpuUnits);
   const kubeletMemory = getNodeKubeletMemoryRequirements(node.memory);
 
-  return requirements.totalCPU + currentUsage.totalCPU + kubeletCPU >
-    node.cpuUnits ||
-    requirements.totalMem + currentUsage.totalMem + kubeletMemory >
-      node.memory ||
-    requirements.totalDisks + currentUsage.totalDisks > node.maxDisks
-    ? false
-    : true;
+  // Account for control plane overhead
+  // Note: Control plane services are now explicitly scheduled as a workload,
+  // so we don't need to add additional overhead here
+  const controlPlaneCPU = 0;
+  const controlPlaneMemory = 0;
+
+  const totalCPUUsed =
+    requirements.totalCPU +
+    currentUsage.totalCPU +
+    kubeletCPU +
+    controlPlaneCPU;
+  const totalMemoryUsed =
+    requirements.totalMem +
+    currentUsage.totalMem +
+    kubeletMemory +
+    controlPlaneMemory;
+  const totalDisksUsed = requirements.totalDisks + currentUsage.totalDisks;
+
+  return !(
+    totalCPUUsed > node.cpuUnits ||
+    totalMemoryUsed > node.memory ||
+    totalDisksUsed > node.maxDisks
+  );
 };
 export const isCloudPlatform = (platform: Platform): boolean =>
   [

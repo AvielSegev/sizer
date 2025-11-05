@@ -41,11 +41,12 @@ export const sortNodesWithLeastConsumption = (
   nodes: Node[],
   services: Service[],
   candidateServices: Service[],
-  workloads: Workload[]
+  workloads: Workload[],
+  machineSets: MachineSet[]
 ): Node[] => {
   const viableNodes = nodes.filter((node) =>
     candidateServices.every((candidate) =>
-      canNodeAddService(node, candidate, services, workloads)
+      canNodeAddService(node, candidate, services, workloads, machineSets)
     )
   );
   const sortedViableNodes = viableNodes.sort(
@@ -65,6 +66,19 @@ const getNode = (machineSet: MachineSet): Node => ({
   services: [],
   instanceName: machineSet.instanceName,
   onlyFor: machineSet.onlyFor,
+  // Set control plane properties based on machine set configuration
+  isControlPlane: machineSet.name === "controlPlane",
+  allowWorkloadScheduling:
+    machineSet.allowWorkloadScheduling ??
+    (machineSet.name === "controlPlane" ? false : undefined),
+  controlPlaneReserved:
+    machineSet.controlPlaneReserved ??
+    (machineSet.name === "controlPlane"
+      ? {
+          cpu: 2, // Default: Reserve 2 CPU for control plane services
+          memory: 4, // Default: Reserve 4GB for control plane services
+        }
+      : undefined),
 });
 
 /**
@@ -92,7 +106,8 @@ export const addServiceToZone =
       nodesInZone,
       services,
       candidateServices,
-      workloads
+      workloads,
+      machineSets
     );
 
     if (sortedViableNodes.length > 0) {

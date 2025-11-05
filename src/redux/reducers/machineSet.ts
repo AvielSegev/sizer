@@ -23,14 +23,21 @@ const defaultState: MachineSet[] = [
     undefined,
     24
   ),
-  getMachinetSetFromInstance(
-    controlInstance,
-    1,
-    "controlPlane",
-    "Control Plane Node",
-    undefined,
-    24
-  ),
+  {
+    ...getMachinetSetFromInstance(
+      controlInstance,
+      1,
+      "controlPlane",
+      "Control Plane Node",
+      undefined,
+      24
+    ),
+    allowWorkloadScheduling: false, // Default to disabled
+    controlPlaneReserved: {
+      cpu: 2, // Reserve 2 CPU for control plane services
+      memory: 4, // Reserve 4GB for control plane services
+    },
+  },
 ];
 
 const addMachineSet = createAction<MachineSet>("ADD_MACHINE");

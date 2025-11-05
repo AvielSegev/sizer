@@ -18,6 +18,7 @@ import PlatformSelector from "../Common/PlatformSelector";
 import "./compute.css";
 
 const isDeletable = (machineName: string) => machineName !== "controlPlane";
+const isEditable = (machineName: string) => true; // Allow editing all machine sets including control plane
 
 const Compute: React.FC = () => {
   const dispatch = useDispatch();
@@ -70,7 +71,8 @@ const Compute: React.FC = () => {
             <MachineSetCard
               key={`${machine.id}`}
               machineSet={machine}
-              disableActions={!isDeletable(machine.name)}
+              disableEdit={!isEditable(machine.name)}
+              disableDelete={!isDeletable(machine.name)}
             />
           </GridItem>
         ))}

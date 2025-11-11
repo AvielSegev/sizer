@@ -29,7 +29,12 @@ import {
   setUsableCapacity,
   store,
   Store,
+  addNode,
+  addZone,
+  addNodesToZone,
 } from "../../redux";
+import { getNodeID } from "../../redux/reducers/node";
+import { generateZoneID } from "../../redux/reducers/zone";
 import { GH_TOKEN, ODF_WORKLOAD_NAME } from "../../constants";
 import { getLink } from "./util";
 import { workloadScheduler } from "../../scheduler/workloadScheduler";
@@ -96,6 +101,47 @@ const ResultsPage: React.FC = () => {
     const unschedulables = [];
     const scheduler = workloadScheduler(store, dispatch);
     const checkSchedulability = isWorkloadSchedulable(services, machineSets);
+
+    // Check if control plane allows workload scheduling
+    const controlPlaneMachineSet = machineSets.find(
+      (ms) => ms.name === "controlPlane"
+    );
+    const isControlPlaneSchedulable =
+      controlPlaneMachineSet?.allowWorkloadScheduling === true;
+
+    // If control plane is schedulable, create control plane nodes proactively (3 nodes in 3 zones)
+    // This ensures they exist for user workloads to be scheduled on
+    if (isControlPlaneSchedulable && controlPlaneMachineSet) {
+      // Create 3 zones for control plane
+      for (let i = 0; i < 3; i++) {
+        const zone = { id: generateZoneID(), nodes: [] };
+        dispatch(addZone(zone));
+
+        // Create control plane node
+        const node = {
+          id: getNodeID(),
+          maxDisks: controlPlaneMachineSet.numberOfDisks,
+          cpuUnits: controlPlaneMachineSet.cpu,
+          memory: controlPlaneMachineSet.memory,
+          machineSet: controlPlaneMachineSet.name,
+          services: [],
+          instanceName: controlPlaneMachineSet.instanceName,
+          onlyFor: [], // Clear taint when workload scheduling is enabled
+          isControlPlane: true,
+          allowWorkloadScheduling: true,
+          controlPlaneReserved: controlPlaneMachineSet.controlPlaneReserved || {
+            cpu: 2,
+            memory: 4,
+          },
+        };
+
+        dispatch(addNode(node));
+        dispatch(addNodesToZone({ zoneId: zone.id, nodes: [node.id] }));
+      }
+    }
+
+    // Always schedule all workloads (including ControlPlane)
+    // When allowWorkloadScheduling is true, user workloads can also run on control plane nodes
     const workloadSchedulability: [Workload, boolean, MachineSet[]][] =
       workloads.map((wl) => [wl, ...checkSchedulability(wl)]);
     const usedZonesId: number[] = [];

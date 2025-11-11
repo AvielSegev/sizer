@@ -6,34 +6,14 @@ import { Store } from "../../redux";
 import {
   getTotalResourceRequirement,
   calculateClusterOverCommit,
+  formatValue,
+  getMaxValue,
 } from "../../utils/common";
-import { ResourceRange } from "../../types";
 import CapacityChart from "../Generic/Capacity";
 import { ODF_WORKLOAD_NAME } from "../../constants";
 
 type GeneralResultsProps = {
   isODFPresent: boolean;
-};
-
-// Helper function to format a value that can be either a number or a range
-const formatValue = (value: number | ResourceRange, decimals = 2): string => {
-  if (typeof value === "number") {
-    return value.toFixed(decimals);
-  }
-  // For ranges, check if min and max are very close (< 20% difference)
-  const percentDiff = ((value.max - value.min) / value.min) * 100;
-  if (percentDiff < 20 && value.min > 0) {
-    // Show average for narrow ranges
-    const avg = (value.min + value.max) / 2;
-    return `~${avg.toFixed(decimals)}`;
-  }
-  // Show full range for wide differences
-  return `${value.min.toFixed(decimals)}-${value.max.toFixed(decimals)}`;
-};
-
-// Helper to get the max value from a number or range (for risk calculation)
-const getMaxValue = (value: number | ResourceRange): number => {
-  return typeof value === "number" ? value : value.max;
 };
 
 const GeneralResults: React.FC<GeneralResultsProps> = ({ isODFPresent }) => {

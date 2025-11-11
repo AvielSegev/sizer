@@ -16,4 +16,12 @@ export type Node = {
   // Only use this set for this particular workload
   // Default is to be used by any workload
   onlyFor: string[];
+  // Control plane scheduling configuration
+  isControlPlane?: boolean; // Mark as control plane node
+  allowWorkloadScheduling?: boolean; // Allow user workloads
+  controlPlaneReserved?: {
+    // Resources reserved for control plane
+    cpu: number;
+    memory: number;
+  };
 };

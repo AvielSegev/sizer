@@ -10,11 +10,15 @@ import * as _ from "lodash";
 type MachineSetCardProps = {
   machineSet: MachineSet;
   disableActions?: boolean;
+  disableEdit?: boolean;
+  disableDelete?: boolean;
 };
 
 const MachineSetCard: React.FC<MachineSetCardProps> = ({
   machineSet,
   disableActions = false,
+  disableEdit = false,
+  disableDelete = false,
 }) => {
   const { name, cpu, memory, instanceName, numberOfDisks, onlyFor, id } =
     machineSet;
@@ -32,6 +36,8 @@ const MachineSetCard: React.FC<MachineSetCardProps> = ({
         remove={removeMS}
         edit={onEditClick}
         disableActions={disableActions}
+        disableEdit={disableEdit}
+        disableDelete={disableDelete}
       >
         <CardItem title="CPU" value={cpu} />
         <CardItem title="Memory" value={memory} />

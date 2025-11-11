@@ -2,6 +2,7 @@ import * as React from "react";
 import * as _ from "lodash";
 import {
   Button,
+  Checkbox,
   Form,
   FormGroup,
   Modal,
@@ -60,6 +61,12 @@ const MachineSetCreate: React.FC<MachineSetCreateProps> = ({
   const [isWorkloadListOpen, setWorkloadListOpen] = React.useState(false);
   const [selectedWorkloads, setWorkloads] = React.useState<Workload[]>([]);
 
+  // Control plane scheduling state
+  const [allowWorkloadScheduling, setAllowWorkloadScheduling] =
+    React.useState(false);
+  const [reservedCPU, setReservedCPU] = React.useState(2);
+  const [reservedMemory, setReservedMemory] = React.useState(4);
+
   const onClose = () => dispatch(closeModal());
 
   const clientID = useGetAnalyticClientID();
@@ -96,9 +103,12 @@ const MachineSetCreate: React.FC<MachineSetCreateProps> = ({
 
     const instanceName = isCloudPlatform ? (instance?.name as string) : "";
 
+    const machineSetName = isStoragePage ? ODF_DEDICATED_MS_NAME : name;
+    const isControlPlane = machineSetName === "controlPlane";
+
     dispatch(
       addMachineSet({
-        name: isStoragePage ? ODF_DEDICATED_MS_NAME : name,
+        name: machineSetName,
         cpu: !isCloudPlatform ? cpu : (instance?.cpuUnits as number),
         memory: !isCloudPlatform ? memory : (instance?.memory as number),
         instanceName: isCloudPlatform
@@ -108,8 +118,18 @@ const MachineSetCreate: React.FC<MachineSetCreateProps> = ({
         onlyFor: isStoragePage
           ? [ODF_WORKLOAD_NAME]
           : selectedWorkloads.map((workload) => workload.name),
-        label: "Worker Node",
+        label: isControlPlane ? "Control Plane Node" : "Worker Node",
         instanceStorage: instance?.instanceStorage,
+        // Add control plane scheduling configuration
+        allowWorkloadScheduling: isControlPlane
+          ? allowWorkloadScheduling
+          : undefined,
+        controlPlaneReserved: isControlPlane
+          ? {
+              cpu: reservedCPU,
+              memory: reservedMemory,
+            }
+          : undefined,
       })
     );
 
@@ -215,6 +235,58 @@ const MachineSetCreate: React.FC<MachineSetCreateProps> = ({
               {workloadOptions}
             </Select>
           </FormGroup>
+        )}
+
+        {/* Control Plane Scheduling Options - only show if name is "controlPlane" */}
+        {!isStoragePage && name === "controlPlane" && (
+          <>
+            <FormGroup
+              label="Control Plane Scheduling"
+              fieldId="control-plane-scheduling"
+            >
+              <Checkbox
+                id="allow-workload-scheduling"
+                label="Allow workload scheduling on control plane nodes"
+                description="Enable this to allow user workloads to be scheduled on control plane nodes. Control plane services will be prioritized."
+                isChecked={allowWorkloadScheduling}
+                onChange={(checked) => setAllowWorkloadScheduling(checked)}
+              />
+            </FormGroup>
+
+            {allowWorkloadScheduling && (
+              <>
+                <FormGroup
+                  label="Reserved CPU for Control Plane"
+                  fieldId="reserved-cpu"
+                  helperText="CPU cores reserved for control plane services"
+                >
+                  <TextInput
+                    id="reserved-cpu"
+                    type="number"
+                    value={reservedCPU}
+                    onChange={(val) => setReservedCPU(parseInt(val) || 2)}
+                    min={1}
+                    max={cpu - 1}
+                  />
+                </FormGroup>
+
+                <FormGroup
+                  label="Reserved Memory for Control Plane (GB)"
+                  fieldId="reserved-memory"
+                  helperText="Memory reserved for control plane services"
+                >
+                  <TextInput
+                    id="reserved-memory"
+                    type="number"
+                    value={reservedMemory}
+                    onChange={(val) => setReservedMemory(parseInt(val) || 4)}
+                    min={1}
+                    max={memory - 1}
+                  />
+                </FormGroup>
+              </>
+            )}
+          </>
         )}
       </Form>
     </Modal>

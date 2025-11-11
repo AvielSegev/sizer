@@ -17,4 +17,11 @@ export type MachineSet = {
   label: string;
   // Instance Storage is mapped from the Instances
   instanceStorage?: number;
+  // Control plane scheduling configuration
+  allowWorkloadScheduling?: boolean; // Allow user workloads on control plane nodes
+  controlPlaneReserved?: {
+    // Resources reserved for control plane
+    cpu: number;
+    memory: number;
+  };
 };

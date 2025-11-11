@@ -5,6 +5,7 @@ import {
   Service,
   NodeOverCommitMetrics,
   ClusterOverCommitMetrics,
+  ResourceRange,
 } from "../types";
 import { Node } from "../types";
 import {
@@ -47,13 +48,29 @@ export const canNodeSupportRequirements = (
   const kubeletCPU = getNodeKubeletCPURequirements(node.cpuUnits);
   const kubeletMemory = getNodeKubeletMemoryRequirements(node.memory);
 
-  return requirements.totalCPU + currentUsage.totalCPU + kubeletCPU >
-    node.cpuUnits ||
-    requirements.totalMem + currentUsage.totalMem + kubeletMemory >
-      node.memory ||
-    requirements.totalDisks + currentUsage.totalDisks > node.maxDisks
-    ? false
-    : true;
+  // Account for control plane overhead
+  // Note: Control plane services are now explicitly scheduled as a workload,
+  // so we don't need to add additional overhead here
+  const controlPlaneCPU = 0;
+  const controlPlaneMemory = 0;
+
+  const totalCPUUsed =
+    requirements.totalCPU +
+    currentUsage.totalCPU +
+    kubeletCPU +
+    controlPlaneCPU;
+  const totalMemoryUsed =
+    requirements.totalMem +
+    currentUsage.totalMem +
+    kubeletMemory +
+    controlPlaneMemory;
+  const totalDisksUsed = requirements.totalDisks + currentUsage.totalDisks;
+
+  return !(
+    totalCPUUsed > node.cpuUnits ||
+    totalMemoryUsed > node.memory ||
+    totalDisksUsed > node.maxDisks
+  );
 };
 export const isCloudPlatform = (platform: Platform): boolean =>
   [
@@ -319,4 +336,38 @@ export const calculateClusterOverCommit = (
     overCommitRatio,
     riskLevel,
   };
+};
+
+/**
+ * Format a value that can be either a number or a resource range
+ * @param value - Number or ResourceRange to format
+ * @param decimals - Number of decimal places (default: 2)
+ * @returns Formatted string representation
+ */
+export const formatValue = (
+  value: number | ResourceRange,
+  decimals = 2
+): string => {
+  if (typeof value === "number") {
+    return value.toFixed(decimals);
+  }
+  // For ranges, check if min and max are very close (< 20% difference)
+  const percentDiff = ((value.max - value.min) / value.min) * 100;
+  if (percentDiff < 20 && value.min > 0) {
+    // Show average for narrow ranges
+    const avg = (value.min + value.max) / 2;
+    return `~${avg.toFixed(decimals)}`;
+  }
+  // Show full range for wide differences
+  return `${value.min.toFixed(decimals)}-${value.max.toFixed(decimals)}`;
+};
+
+/**
+ * Get the maximum value from a number or resource range
+ * Used for risk calculation based on worst-case scenario
+ * @param value - Number or ResourceRange
+ * @returns Maximum value
+ */
+export const getMaxValue = (value: number | ResourceRange): number => {
+  return typeof value === "number" ? value : value.max;
 };

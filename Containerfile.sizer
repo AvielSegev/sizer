@@ -10,13 +10,17 @@ LABEL \
 
 WORKDIR /app
 
-# Copy workspace root and all workspace packages
-COPY package*.json ./
-COPY lib ./lib
-COPY service ./service
+RUN chown -R 1001:0 /app
+
+USER 1001
+
+# Copy workspace
+COPY --chown=1001:0 package*.json ./
+COPY --chown=1001:0 lib ./lib
+COPY --chown=1001:0 service ./service
 
 # Install all dependencies
-RUN --mount=type=cache,target=/root/.npm \
+RUN --mount=type=cache,target=/home/node/.npm \
     npm install --legacy-peer-deps
 
 # Build library and service

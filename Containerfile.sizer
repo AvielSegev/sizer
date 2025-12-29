@@ -1,5 +1,5 @@
 # Build stage
-FROM node:18-alpine AS builder
+FROM registry.access.redhat.com/ubi9/nodejs-18 AS builder
 
 WORKDIR /app
 
@@ -20,7 +20,7 @@ RUN --mount=type=cache,target=/root/.npm \
     npm install --legacy-peer-deps --omit=dev
 
 # Runtime stage
-FROM node:18-alpine
+FROM registry.access.redhat.com/ubi9/nodejs-18-minimal
 
 WORKDIR /app
 
